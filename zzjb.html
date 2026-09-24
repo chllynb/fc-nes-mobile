@@ -97,6 +97,10 @@
   }
 
   /* ---------- 启动模拟器 ---------- */
+  function keepAwake() {
+    if (!("wakeLock" in navigator)) return;      // 玩 RPG 时屏幕别灭（需 https，Pages 上有）
+    try { navigator.wakeLock.request("screen").catch(function () {}); } catch (e) {}
+  }
   function boot(u8, name, remembered) {
     if (booted) return;
     booted = true;
@@ -107,13 +111,25 @@
     window.EJS_gameUrl = URL.createObjectURL(blob);
     window.EJS_gameName = name || "game";
     window.EJS_pathtodata = "emulatorjs/";
-    window.EJS_startOnLoaded = true;
+    // 不自动启动：让用户先用手指点一下「开始」——这一下同时解锁 iOS 音频，
+    // 并且 EJS 只有在这一下是触摸时才会常显虚拟手柄（自动启动会跳过该逻辑）。
+    window.EJS_startOnLoaded = false;
     window.EJS_backgroundColor = "#0b0d0a";
     window.EJS_language = "zh-CN";
     var s = document.createElement("script");
     s.src = "emulatorjs/loader.js";
     s.onerror = function () { fail("内核文件加载失败，请刷新重试（emulatorjs/ 目录缺失）"); };
     document.head.appendChild(s);
+    // 兜底：触摸设备上一旦开始运行，强制把虚拟手柄常显（否则菜单开关后可能不再出现）
+    var isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+    var guard = setInterval(function () {
+      var e = window.EJS_emulator;
+      if (!e || !e.started) return;
+      if (isTouch && typeof e.toggleVirtualGamepad === "function") e.toggleVirtualGamepad(true);
+      clearInterval(guard);
+    }, 700);
+    setTimeout(function () { clearInterval(guard); }, 120000);
+    keepAwake();
     if (remembered) {
       keepTip.classList.add("show");
       setTimeout(function () { keepTip.classList.remove("show"); }, 3500);
