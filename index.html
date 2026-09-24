@@ -299,7 +299,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
     } catch (e) {}
     if (ctxA.state === "suspended") ctxA.resume();
   }
-  var AUDIO_TARGET_MS = 80;          // 音频缓冲目标（越大越稳，延迟越高）
+  var AUDIO_TARGET_MS = 80;      // 常态缓冲水位（延迟）          // 音频缓冲目标（越大越稳，延迟越高）
   function startProcessor() {
     if (spNode || !ctxA) return;
     var sr = ctxA.sampleRate;
@@ -340,7 +340,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
   function vol() { var v = parseFloat($("#vol").value); return isNaN(v) ? 0.8 : v; }
   function prefillAudio() {
     if (!ctxA) return;
-    var n = Math.round(ctxA.sampleRate * AUDIO_TARGET_MS / 1000);
+    var n = Math.round(ctxA.sampleRate * 150 / 1000);   // 启动时先垫 150ms，之后会被漂移控制器收敛回 80ms
     for (var i = 0; i < n; i++) pushAudio(0, 0);
   }
 
@@ -733,6 +733,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
 
 
 
