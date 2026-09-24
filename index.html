@@ -112,6 +112,8 @@ body{
   -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);overflow:auto;
   padding:calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom))}
 #modal.show{display:flex;align-items:center;justify-content:center}
+#panel.show{display:block}
+#panel .box{margin:0 auto}
 .box{width:100%;max-width:460px;background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:18px;line-height:1.75;font-size:13px;color:var(--dim)}
 .box h3{margin:0 0 10px;color:var(--amber);font-size:16px;letter-spacing:1px}
@@ -123,8 +125,8 @@ input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:4px
   background:linear-gradient(90deg,var(--ink),var(--amber))}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;
   background:var(--amber);border:2px solid #12140e}
-.sw{position:relative;width:48px;height:28px;border-radius:14px;background:rgba(255,255,255,.12);transition:.15s}
-.sw input{position:absolute;inset:0;opacity:0;margin:0}
+.sw{position:relative;width:48px;height:28px;border-radius:14px;background:rgba(255,255,255,.12);transition:.15s;flex:0 0 auto}
+.sw input{position:absolute;inset:0;opacity:0;margin:0;z-index:1}
 .sw i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#8a9a6a;transition:.15s}
 .sw input:checked+i{left:23px;background:var(--amber)}
 .box .ok{margin-top:14px;display:block;width:100%;padding:11px;border:0;border-radius:9px;
@@ -132,6 +134,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
 .box a{color:var(--amber)}
 .hr{height:1px;background:var(--line);margin:12px 0}
 .small{font-size:11.5px;opacity:.72}
+.tin{flex:1 1 110px;min-width:0;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;
+  background:rgba(255,255,255,.06);color:var(--ink);font:13px/1 ui-monospace,Menlo,monospace}
+.tin::placeholder{color:var(--dim);opacity:.6}
+.mini{flex:0 0 auto;width:30px;height:30px;margin-left:6px;border:1px solid var(--line);border-radius:8px;
+  background:rgba(255,255,255,.06);color:var(--dim);font:700 13px/1 -apple-system,sans-serif}
+.mini2{height:36px;padding:0 14px;border:1px solid rgba(255,176,46,.5);border-radius:8px;
+  background:rgba(255,176,46,.15);color:var(--amber);font:700 12px/1 -apple-system,sans-serif}
+.mini2.wide{width:100%;margin-top:12px}
+#cheatPre .row,#cheatCus .row{margin:12px 0}
+#cheatPre label,#cheatCus label{font-weight:600}
 
 /* ---------- toast ---------- */
 #toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translate(-50%,14px);
@@ -152,6 +164,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
     <button class="tb" id="btnSave">💾</button>
     <button class="tb" id="btnLoad">📥</button>
     <select id="slot" title="存档位"><option>1</option><option>2</option><option>3</option></select>
+    <button class="tb" id="btnCheat">🧬秘籍</button>
     <button class="tb" id="btnSpeed">1×</button>
     <button class="tb" id="btnMute">🔊</button>
     <button class="tb" id="btnFs">⛶</button>
@@ -187,6 +200,26 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
 
   <input id="file" type="file" accept=".nes,.NES,application/octet-stream,application/x-nes-rom">
   <div id="toast"></div>
+
+  <div id="panel">
+    <div class="box">
+      <h3>🧬 金手指</h3>
+      <div class="small">预设为 FC《重装机兵》常用码，来自公开攻略站，不同 ROM 版本可能不适用；如有异常关闭即可。内存码即时生效，Game Genie 码需重启游戏。</div>
+      <div id="cheatPre"></div>
+      <div class="hr"></div>
+      <h4>自定义代码</h4>
+      <div class="small">支持三种格式：<code>SXIOPO</code>（Game Genie 6/8 位）· <code>035C-01-FF</code>（地址-字节数-数值）· <code>7E035C:FF</code>（地址:数值）</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        <input id="cheatCode" class="tin" placeholder="输入代码" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <input id="cheatName" class="tin" style="flex:1 1 80px" placeholder="备注（可选）" autocomplete="off">
+        <button id="cheatAdd" class="mini2">添加</button>
+      </div>
+      <div id="cheatCus"></div>
+      <div class="hr"></div>
+      <button id="cheatReboot" class="mini2 wide">↻ 重启游戏（让 Game Genie 码生效）</button>
+      <button class="ok" id="btnCheatClose">关闭</button>
+    </div>
+  </div>
 
   <div id="modal">
     <div class="box">
@@ -398,11 +431,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
     initAudio();
     romBytes = u8;
     if (!nes) newNES();
-    try { nes.loadROM(toBinary(u8)); }
+    var ok = true;
+    try { nes.loadROM(toBinary(applyGG(u8))); }
     catch (e) { toast("ROM 载入失败：" + (e && e.message ? e.message : e)); return false; }
     prefillAudio();
     underruns = 0; minBuf = 1e9;   // 只统计真正运行游戏期间的音频欠载
     romName = name || "game.nes";
+    cheatPre = {}; cheatCus = []; ramList = []; ggList = [];   // 换卡时清空上一张的金手指
     crashed = false;
     running = true; paused = false; acc = 0; lastTs = 0; frameCount = 0;
     $("#hint").style.display = "none";
@@ -411,6 +446,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
     setStat("已载入");
     if (!silent) toast("已载入 " + romName);
     restoreSRAM();
+    loadCheatPrefs();
     keepAwake();
     return true;
   }
@@ -449,6 +485,204 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
       for (var i = 0; i < n; i++) nes.cpu.mem[0x6000 + i] = b[i];
       if (n) toast("已恢复游戏内存档");
     });
+  }
+
+  /* ================= 金手指 ================= */
+  // 两种码：
+  //  - RAM 锁定码：每帧把指定地址写成固定值（EC 格式 XXXX-NN-VV），即时生效
+  //  - Game Genie 码：把补丁打进 PRG-ROM，需要重启游戏生效
+  // SRAM 区（$6000-$7FFF）与 WRAM 区（$0000-$07FF）都可写；$8000 以上拒绝。
+  var PRESETS = [
+    { id: "mm_money", name: "💰 金钱 999 万", desc: "金钱锁定 9,999,999 G（实时）",
+      ram: [[0x035C, 0x98], [0x035D, 0x96], [0x035E, 0x7F],
+            [0x645D, 0x98], [0x645E, 0x96], [0x645F, 0x7F]] },
+    { id: "mm_hp", name: "❤️ 主角 HP 不减", desc: "最大/当前 HP 锁 65535",
+      ram: [[0x6460, 0xFF], [0x6461, 0xFF], [0x6466, 0xFF], [0x6467, 0xFF]] },
+    { id: "mm_tank", name: "🛡 战车 HP 不减（1-3 号）", desc: "三台战车 HP 锁 9999",
+      ram: [[0x0482, 0x27], [0x0483, 0x0F], [0x0486, 0x27], [0x0487, 0x0F],
+            [0x048A, 0x27], [0x048B, 0x0F]] }
+  ];
+  var cheatPre = {}, cheatCus = [];   // 预设开关 / 自定义列表
+  var ramList = [], ggList = [];      // 展平后的生效列表
+
+  /* ---- Game Genie 编解码（Benzene《NES Game Genie Code Format DOC v0.71》）---- */
+  var GGAL = "APZLGITYEOXUKSVN";
+  var GG_VS = [[0, 3], [1, 2], [1, 1], [1, 0], [5, 3], [0, 2], [0, 1], [0, 0]];        // 6 位码：value 位 -> [字符,位]
+  var GG_VS8 = [[0, 3], [1, 2], [1, 1], [1, 0], [7, 3], [0, 2], [0, 1], [0, 0]];       // 8 位码：value 第5位改由第8字符供给
+  var GG_AS = [[3, 2], [3, 1], [3, 0], [4, 3], [5, 2], [5, 1], [5, 0], [1, 3], [2, 2], [2, 1], [2, 0], [3, 3], [4, 2], [4, 1], [4, 0]];
+  var GG_CS = [[6, 3], [7, 2], [7, 1], [7, 0], [5, 3], [6, 2], [6, 1], [6, 0]];
+  function ggDecode(code) {
+    code = String(code || "").toUpperCase().replace(/[^A-Z]/g, "");
+    if (code.length !== 6 && code.length !== 8) return null;
+    var n = [], i;
+    for (i = 0; i < code.length; i++) { var x = GGAL.indexOf(code.charAt(i)); if (x < 0) return null; n.push(x); }
+    function b(ci, bi) { return (n[ci] >> bi) & 1; }
+    var VS = code.length === 8 ? GG_VS8 : GG_VS;
+    var val = 0, addr = 0x8000, cmp = -1, t, j;
+    for (j = 0; j < 8; j++) { t = VS[j]; val = (val << 1) | b(t[0], t[1]); }
+    for (j = 0; j < 15; j++) addr |= b(GG_AS[j][0], GG_AS[j][1]) << (14 - j);
+    if (code.length === 8) { cmp = 0; for (j = 0; j < 8; j++) { t = GG_CS[j]; cmp = (cmp << 1) | b(t[0], t[1]); } }
+    return { a: addr, v: val, c: cmp };
+  }
+  function ggEncode(a, v, c) {
+    var eight = (c !== undefined && c !== null && c >= 0);
+    var VS = eight ? GG_VS8 : GG_VS;
+    var n = [0, 0, 0, 0, 0, 0, 0, 0], i, j, t;
+    for (j = 0; j < 8; j++) { t = VS[j]; n[t[0]] |= (((v >> (7 - j)) & 1) << t[1]); }
+    var aa = a & 0x7FFF;
+    for (j = 0; j < 15; j++) { t = GG_AS[j]; n[t[0]] |= (((aa >> (14 - j)) & 1) << t[1]); }
+    if (eight) for (j = 0; j < 8; j++) { t = GG_CS[j]; n[t[0]] |= (((c >> (7 - j)) & 1) << t[1]); }
+    var s = ""; for (i = 0; i < (eight ? 8 : 6); i++) s += GGAL.charAt(n[i] & 0xF);
+    return s;
+  }
+
+  /* ---- 把生效的 GG 码打进 ROM 镜像（返回补丁后的副本；无 GG 码时原样返回）---- */
+  function applyGG(u8) {
+    if (!ggList.length || u8.length < 17) return u8;
+    var prg16 = u8[4] || 0, prgLen = prg16 * 16384;
+    if (prgLen <= 0) return u8;
+    var mapper = ((u8[6] >> 4) | (u8[7] & 0xF0)) & 0xFFF;
+    var out = new Uint8Array(u8);
+    for (var g = 0; g < ggList.length; g++) {
+      var d = ggDecode(ggList[g]);
+      if (!d || d.a < 0x8000) continue;
+      var offs = [], k;
+      if (mapper === 0) {                       // NROM：地址映射是确定的
+        offs = (prg16 === 1) ? [d.a & 0x3FFF] : [d.a - 0x8000];
+      } else {                                   // 换页卡带：$C000+ 固定最后一页，$8000-BFFF 逐 bank 试
+        var rel = d.a & 0x3FFF;
+        if (d.a >= 0xC000) offs = [prgLen - 0x4000 + rel];
+        else for (k = 0; k < prg16; k++) offs.push(k * 0x4000 + rel);
+      }
+      var hit = 0;
+      for (k = 0; k < offs.length; k++) {
+        var off = offs[k];
+        if (off < 0 || 16 + off >= out.length) continue;
+        if (d.c >= 0 && out[16 + off] !== d.c) continue;   // 8 位码带比对字节，只改命中的
+        out[16 + off] = d.v; hit++;
+      }
+      if (!hit) toast("金手指 " + ggList[g] + " 没有命中这个 ROM（版本不符？）");
+    }
+    return out;
+  }
+  function applyRamCheats() {
+    if (!ramList.length || !nes || !nes.cpu || !nes.cpu.mem) return;
+    for (var i = 0; i < ramList.length; i++) nes.cpu.mem[ramList[i][0]] = ramList[i][1];
+  }
+
+  /* ---- 状态与持久化（按 ROM 名分开存）---- */
+  function cheatKey() { return "cheat:" + (romName || "_default"); }
+  function rebuildCheats(save) {
+    ramList = []; ggList = [];
+    var i, j;
+    for (i = 0; i < PRESETS.length; i++) {
+      var p = PRESETS[i];
+      if (cheatPre[p.id]) for (j = 0; j < p.ram.length; j++) ramList.push(p.ram[j]);
+    }
+    for (i = 0; i < cheatCus.length; i++) {
+      var cu = cheatCus[i];
+      if (!cu.on) continue;
+      for (j = 0; j < cu.ram.length; j++) ramList.push(cu.ram[j]);
+      for (j = 0; j < cu.gg.length; j++) ggList.push(cu.gg[j]);
+    }
+    if (save !== false) idbSet(cheatKey(), { pre: cheatPre, cus: cheatCus });
+  }
+  function loadCheatPrefs() {
+    idbGet(cheatKey()).then(function (rec) {
+      if (!rec) { renderCheats(); return; }
+      cheatPre = rec.pre || {}; cheatCus = rec.cus || [];
+      rebuildCheats(false);
+      renderCheats();
+      var n = 0, k; for (k in cheatPre) if (cheatPre[k]) n++;
+      for (var i = 0; i < cheatCus.length; i++) if (cheatCus[i].on) n++;
+      if (ggList.length && running && romBytes) rebootRom(null);   // GG 码只在载入时生效，补一次重启
+      if (n) toast("已恢复 " + n + " 条金手指");
+    });
+  }
+
+  /* ---- 自定义代码解析 ---- */
+  function parseCheat(s) {
+    s = String(s || "").trim().toUpperCase().replace(/\s+/g, "");
+    var m;
+    if (/^[APZLGITYEOXUKSVN]{6}([APZLGITYEOXUKSVN]{2})?$/.test(s)) {
+      return ggDecode(s) ? { ram: [], gg: [s] } : null;
+    }
+    if ((m = s.match(/^([0-9A-F]{3,4})-([0-9]{1,2})-([0-9A-F]+)$/))) {
+      var a = parseInt(m[1], 16), n = parseInt(m[2], 10), vhex = m[3];
+      if (n < 1 || n > 8) return null;
+      if (vhex.length !== n * 2) return null;      // 位数必须严格匹配，避免把 "9999" 误当十六进制
+      if (a + n > 0x8000) return null;
+      var ram = [];
+      for (var i = 0; i < n; i++) ram.push([a + i, parseInt(vhex.substr(i * 2, 2), 16)]);
+      return { ram: ram, gg: [] };
+    }
+    if ((m = s.match(/^([0-9A-F]{3,4})[:=]([0-9A-F]{2})$/))) {
+      var a2 = parseInt(m[1], 16);
+      if (a2 >= 0x8000) return null;
+      return { ram: [[a2, parseInt(m[2], 16)]], gg: [] };
+    }
+    return null;
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function fmtRam(ram) {
+    var s = [];
+    for (var i = 0; i < Math.min(ram.length, 3); i++) s.push(ram[i][0].toString(16).toUpperCase() + "=" + ("0" + ram[i][1].toString(16)).slice(-2).toUpperCase());
+    return s.join(" ") + (ram.length > 3 ? " …" : "");
+  }
+
+  /* ---- 面板 ---- */
+  function renderCheats() {
+    var host = $("#cheatPre");
+    if (!host) return;
+    var h = "", i;
+    for (i = 0; i < PRESETS.length; i++) {
+      var p = PRESETS[i];
+      h += '<div class="row"><div><label>' + p.name + '</label><div class="small">' + p.desc + '</div></div>' +
+           '<span class="sw"><input type="checkbox" data-pre="' + p.id + '"' + (cheatPre[p.id] ? " checked" : "") + '><i></i></span></div>';
+    }
+    host.innerHTML = h;
+    var h2 = "";
+    for (i = 0; i < cheatCus.length; i++) {
+      var cu = cheatCus[i];
+      h2 += '<div class="row"><div><label>' + esc(cu.name) + '</label><div class="small">' +
+            (cu.gg.length ? "Game Genie · 重启生效" : esc(fmtRam(cu.ram)) + " · 实时") + '</div></div>' +
+            '<span class="sw"><input type="checkbox" data-cus="' + cu.id + '"' + (cu.on ? " checked" : "") + '><i></i></span>' +
+            '<button class="mini" data-del="' + cu.id + '">✕</button></div>';
+    }
+    $("#cheatCus").innerHTML = h2 || '<div class="small">（还没有自定义代码）</div>';
+  }
+  function afterToggle(hasGG) {
+    rebuildCheats();
+    if (hasGG && running && romBytes) {
+      rebootRom(null);
+      toast("已重启游戏，Game Genie 码生效");
+    } else {
+      toast(running ? "金手指已生效" : "已记录，载入游戏后生效");
+    }
+  }
+  function setCheatOn(id, on) {
+    for (var i = 0; i < PRESETS.length; i++)
+      if (PRESETS[i].id === id) { cheatPre[id] = on; afterToggle(false); return; }
+    for (i = 0; i < cheatCus.length; i++)
+      if (cheatCus[i].id === id) { cheatCus[i].on = on; afterToggle(cheatCus[i].gg.length > 0); return; }
+  }
+  function addCustomCheat() {
+    var ch = parseCheat($("#cheatCode").value);
+    if (!ch) { toast("代码格式不对。数值位数须 = 字节数×2，如 645D-03-98967F"); return; }
+    var name = $("#cheatName").value.trim();
+    var hasGG = ch.gg.length > 0;
+    cheatCus.push({
+      id: "c" + Date.now().toString(36) + Math.floor(Math.random() * 1e4),
+      name: name || (hasGG ? ch.gg.join(" ") : fmtRam(ch.ram)),
+      ram: ch.ram, gg: ch.gg, on: true
+    });
+    $("#cheatCode").value = ""; $("#cheatName").value = "";
+    afterToggle(hasGG);
+    renderCheats();
   }
 
   /* ================= 存档 / 读档 ================= */
@@ -569,6 +803,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
     var dt = ts - lastTs; lastTs = ts;
     if (!running || paused || !nes) { fpsT = ts; fps = 0; return; }
     if (dt > 250) dt = FRAME_MS;
+    if (ramList.length) applyRamCheats();
     acc += dt * speed;
     var n = 0, max = Math.round(4 * speed);
     while (acc >= FRAME_MS && n < max) {
@@ -610,16 +845,21 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
     $("#btnPlay").textContent = paused ? "▶" : "⏸";
     lastTs = 0; acc = 0; updateStat();
   }
-  function resetGame() {
-    if (!nes || !romBytes) { toast("还没有运行游戏"); return; }
+  function rebootRom(msg) {
     pressedAll(false);
+    saveSRAM();                                     // 重启前先把卡带存档落盘
     try {
-      nes.loadROM(toBinary(romBytes));      // 完整重新载入 = 真正的开机重置
+      nes.loadROM(toBinary(applyGG(romBytes)));     // 完整重新载入 = 真正的开机重置（同时应用 GG 补丁）
       nes.crashMessage = "";
     } catch (e) { toast("重置失败：" + e.message); return; }
-    paused = false; acc = 0; lastTs = 0; frameCount = 0;
+    crashed = false; paused = false; acc = 0; lastTs = 0; frameCount = 0; fpsT = 0; fps = 0;
     $("#btnPlay").textContent = "⏸";
-    toast("已重置");
+    restoreSRAM();                                  // 真实卡带的电池存档在断电重启后仍在
+    if (msg) toast(msg);
+  }
+  function resetGame() {
+    if (!nes || !romBytes) { toast("还没有运行游戏"); return; }
+    rebootRom("已重置");
   }
   function toggleMute() {
     muted = !muted;
@@ -665,6 +905,31 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
     });
     $("#btnInfo").addEventListener("click", function () { $("#modal").classList.add("show"); });
     $("#modal").addEventListener("click", function (e) { if (e.target === this) this.classList.remove("show"); });
+    $("#btnCheat").addEventListener("click", function () { renderCheats(); $("#panel").classList.add("show"); });
+    $("#btnCheatClose").addEventListener("click", function () { $("#panel").classList.remove("show"); });
+    $("#panel").addEventListener("click", function (e) { if (e.target === this) this.classList.remove("show"); });
+    $("#cheatPre").addEventListener("change", function (e) {
+      var id = e.target.getAttribute("data-pre");
+      if (id) setCheatOn(id, e.target.checked);
+    });
+    $("#cheatCus").addEventListener("change", function (e) {
+      var id = e.target.getAttribute("data-cus");
+      if (id) setCheatOn(id, e.target.checked);
+    });
+    $("#cheatCus").addEventListener("click", function (e) {
+      var id = e.target.getAttribute && e.target.getAttribute("data-del");
+      if (!id) return;
+      for (var i = 0; i < cheatCus.length; i++)
+        if (cheatCus[i].id === id) {
+          var hadGG = cheatCus[i].gg.length > 0;
+          cheatCus.splice(i, 1);
+          afterToggle(hadGG);
+          renderCheats();
+          return;
+        }
+    });
+    $("#cheatAdd").addEventListener("click", addCustomCheat);
+    $("#cheatReboot").addEventListener("click", function () { unlockAudio(); resetGame(); });
     document.addEventListener("pointerdown", function once() { unlockAudio(); document.removeEventListener("pointerdown", once); });
     $("#stage").addEventListener("click", function () {
       var app = document.getElementById("app");
@@ -728,12 +993,26 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
     },
     load: function (arr, name) { return loadROM(new Uint8Array(arr), name || "test.nes", true); },
     press: press, release: release, nes: function () { return nes; },
-    sram: sramBytes
+    sram: sramBytes,
+    ggDecode: ggDecode, ggEncode: ggEncode, parseCheat: parseCheat,
+    cheats: function () {
+      return { ram: ramList.slice(), gg: ggList.slice(), pre: cheatPre, cus: cheatCus.length };
+    },
+    setCheat: function (id, on) { setCheatOn(id, !!on); },
+    addCheat: function (s, name) {
+      var ch = parseCheat(s);
+      if (!ch) return null;
+      cheatCus.push({ id: "c" + Date.now().toString(36) + Math.floor(Math.random() * 1e4), name: name || s, ram: ch.ram, gg: ch.gg, on: true });
+      afterToggle(ch.gg.length > 0);
+      return true;
+    },
+    clearCheats: function () { cheatPre = {}; cheatCus = []; ramList = []; ggList = []; }
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
 
 
 
