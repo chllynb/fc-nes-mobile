@@ -40,6 +40,7 @@
   <h1>重装机兵 · 手机高兼容版</h1>
   <div class="lead">这台模拟器用的是<b>高兼容内核（FCEUmm）</b>，汉化版、改版卡带都能跑。</div>
   <div class="dim">本页<b>不含任何游戏文件</b>。请选择你自己准备的 <code>.nes</code> 文件——它只会保存在你手机本地，不会上传到任何地方。选一次就记住，以后点开直接进游戏。</div>
+  <div class="dim">💡 <b>金手指</b>：游戏画面底部菜单里点「Cheats / 金手指」，里面已预置《重装机兵》的金钱、主角 HP、战车 HP 代码，逐条打开即可（不同版本卡带可能要对换地址，页内已按两种地址各备一份）。</div>
   <button class="btn" id="pick">📂 选择游戏文件</button>
   <input id="file" type="file" accept=".nes,.NES,.zip,.7z,application/octet-stream">
   <div class="dim" id="msg"></div>
@@ -105,10 +106,16 @@
     if (booted) return;
     booted = true;
     gate.classList.remove("show");
-    var blob = new Blob([u8], { type: "application/octet-stream" });
+    // 传字符串 = 直接用网址（服务器版：同目录 game.nes）；传 Uint8Array = 手机本地文件
+    var src;
+    if (typeof u8 === "string") {
+      src = u8;
+    } else {
+      src = URL.createObjectURL(new Blob([u8], { type: "application/octet-stream" }));
+    }
     window.EJS_player = "#game";
     window.EJS_core = "fceumm";
-    window.EJS_gameUrl = URL.createObjectURL(blob);
+    window.EJS_gameUrl = src;
     window.EJS_gameName = name || "game";
     window.EJS_pathtodata = "emulatorjs/";
     // 不自动启动：让用户先用手指点一下「开始」——这一下同时解锁 iOS 音频，
@@ -116,6 +123,25 @@
     window.EJS_startOnLoaded = false;
     window.EJS_backgroundColor = "#0b0d0a";
     window.EJS_language = "zh-CN";
+    // 金手指预设（FCEUmm 认 PAR 码：8 位十六进制 = "00" + 4 位地址 + 2 位数值）
+    // 来源：公开攻略站的 FC《重装机兵》内存码（035C/645D 金钱、6460/6466 HP、0482 战车）；
+    // 不同 ROM 版本可能不适用，所以默认全部关闭，进游戏后到菜单里逐条打开试。
+    window.EJS_cheats = [
+      ["💰 金钱 9999999（地址A：645D）", "00645D98"],
+      ["💰 金钱 9999999（地址A 续 645E）", "00645E96"],
+      ["💰 金钱 9999999（地址A 续 645F）", "00645F7F"],
+      ["💰 金钱 9999999（地址B：035C）", "00035C98"],
+      ["💰 金钱 9999999（地址B 续 035D）", "00035D96"],
+      ["💰 金钱 9999999（地址B 续 035E）", "00035E7F"],
+      ["❤️ 主角当前 HP 65535（6466）", "006466FF"],
+      ["❤️ 主角当前 HP 65535（6467）", "006467FF"],
+      ["❤️ 主角最大 HP 65535（6460）", "006460FF"],
+      ["❤️ 主角最大 HP 65535（6461）", "006461FF"],
+      ["🛡 1号战车 HP 9999（0482 低字节=0F）", "0004820F"],
+      ["🛡 1号战车 HP 9999（0483 高字节=27）", "00048327"],
+      ["🛡 1号战车 HP 9999（0482=27，字节序相反）", "00048227"],
+      ["🛡 1号战车 HP 9999（0483=0F，字节序相反）", "0004830F"]
+    ];
     var s = document.createElement("script");
     s.src = "emulatorjs/loader.js";
     s.onerror = function () { fail("内核文件加载失败，请刷新重试（emulatorjs/ 目录缺失）"); };
@@ -171,16 +197,24 @@
     drop().then(function () { location.reload(); });
   });
 
-  /* ---------- 进入页面：先找已记住的文件 ---------- */
+  /* ---------- 进入页面：先找已记住的文件；再试服务器同目录的 game.nes；最后才让用户选 ---------- */
   load().then(function (rec) {
     if (rec && rec.data) {
       var u8 = rec.data.length ? new Uint8Array(rec.data) : null;
       if (u8 && u8.length > 16) { forgetBtn.style.display = ""; boot(u8, rec.name, true); return; }
     }
     forgetBtn.style.display = "none";
-    gate.classList.add("show");
-    msg.textContent = "手机上还没有游戏文件？从电脑用微信「文件传输助手」发到手机，存进「文件」App，再回到这里选择即可。";
+    fetch("game.nes", { method: "HEAD" }).then(function (r) {
+      if (r && r.ok) { boot("game.nes", "重装机兵", false); return; }
+      showPicker("手机上还没有游戏文件？从电脑用微信「文件传输助手」发到手机，存进「文件」App，再回到这里选择即可。");
+    }).catch(function () {
+      showPicker("手机上还没有游戏文件？从电脑用微信「文件传输助手」发到手机，存进「文件」App，再回到这里选择即可。");
+    });
   });
+  function showPicker(text) {
+    gate.classList.add("show");
+    msg.textContent = text;
+  }
 })();
 </script>
 </body>
