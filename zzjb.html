@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="重装机兵">
+<meta name="theme-color" content="#0b0d0a">
+<title>重装机兵 · 手机高兼容版</title>
+<link rel="stylesheet" href="emulatorjs/emulator.min.css">
+<style>
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0b0d0a;
+    color:#d7e8a8;font:14px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+  #game{position:fixed;inset:0}
+  #gate{position:fixed;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:16px;padding:calc(24px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom));
+    text-align:center;background:radial-gradient(120% 90% at 50% 0%,#131810 0%,#0b0d0a 60%)}
+  #gate.show{display:flex}
+  #gate h1{margin:0;color:#ffb02e;font-size:21px;letter-spacing:2px}
+  #gate .lead{color:#d7e8a8;font-size:13.5px;max-width:360px}
+  #gate .dim{color:#8a9a6a;font-size:12px;max-width:360px;line-height:1.8}
+  #gate .btn{background:#ffb02e;color:#12140e;font-weight:700;padding:13px 26px;border:0;border-radius:10px;
+    font-size:16px;cursor:pointer;box-shadow:0 6px 18px rgba(255,176,46,.22)}
+  #gate .btn:active{transform:translateY(1px)}
+  #gate .link{background:transparent;border:0;color:#8a9a6a;font-size:12px;text-decoration:underline;cursor:pointer}
+  #file{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+  #keep{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    z-index:6;display:none;background:rgba(20,24,16,.92);border:1px solid rgba(215,232,168,.2);color:#8a9a6a;
+    font-size:11.5px;padding:6px 12px;border-radius:14px;white-space:nowrap}
+  #keep.show{display:block}
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="gate" class="show">
+  <h1>重装机兵 · 手机高兼容版</h1>
+  <div class="lead">这台模拟器用的是<b>高兼容内核（FCEUmm）</b>，汉化版、改版卡带都能跑。</div>
+  <div class="dim">本页<b>不含任何游戏文件</b>。请选择你自己准备的 <code>.nes</code> 文件——它只会保存在你手机本地，不会上传到任何地方。选一次就记住，以后点开直接进游戏。</div>
+  <button class="btn" id="pick">📂 选择游戏文件</button>
+  <input id="file" type="file" accept=".nes,.NES,.zip,.7z,application/octet-stream">
+  <div class="dim" id="msg"></div>
+  <button class="link" id="forget" style="display:none">换个游戏文件 / 忘掉已记住的文件</button>
+</div>
+
+<div id="keep">已记住这个文件，下次直接开玩</div>
+
+<script>
+(function () {
+  "use strict";
+  var DB_NAME = "zzjb-online", STORE = "kv", ROM_KEY = "rom";
+  var gate = document.getElementById("gate"), msg = document.getElementById("msg"),
+      keepTip = document.getElementById("keep"), forgetBtn = document.getElementById("forget");
+  var booted = false;
+
+  /* ---------- IndexedDB（失败就优雅降级：不记住，但本次仍可玩） ---------- */
+  function db() {
+    return new Promise(function (res, rej) {
+      var r;
+      try { r = indexedDB.open(DB_NAME, 1); } catch (e) { rej(e); return; }
+      r.onupgradeneeded = function () { var d = r.result; if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+    });
+  }
+  function save(u8, name) {
+    return db().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction(STORE, "readwrite");
+        t.objectStore(STORE).put({ data: u8, name: name, ts: Date.now() }, ROM_KEY);
+        t.oncomplete = function () { res(true); };
+        t.onerror = function () { rej(t.error); };
+      });
+    }).catch(function () { return false; });
+  }
+  function load() {
+    return db().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction(STORE, "readonly"), q = t.objectStore(STORE).get(ROM_KEY);
+        q.onsuccess = function () { res(q.result); };
+        q.onerror = function () { rej(q.error); };
+      });
+    }).catch(function () { return null; });
+  }
+  function drop() {
+    return db().then(function (d) {
+      return new Promise(function (res) {
+        var t = d.transaction(STORE, "readwrite");
+        t.objectStore(STORE)["delete"](ROM_KEY);
+        t.oncomplete = function () { res(true); };
+        t.onerror = function () { res(false); };
+      });
+    }).catch(function () { return false; });
+  }
+
+  /* ---------- 启动模拟器 ---------- */
+  function boot(u8, name, remembered) {
+    if (booted) return;
+    booted = true;
+    gate.classList.remove("show");
+    var blob = new Blob([u8], { type: "application/octet-stream" });
+    window.EJS_player = "#game";
+    window.EJS_core = "fceumm";
+    window.EJS_gameUrl = URL.createObjectURL(blob);
+    window.EJS_gameName = name || "game";
+    window.EJS_pathtodata = "emulatorjs/";
+    window.EJS_startOnLoaded = true;
+    window.EJS_backgroundColor = "#0b0d0a";
+    window.EJS_language = "zh-CN";
+    var s = document.createElement("script");
+    s.src = "emulatorjs/loader.js";
+    s.onerror = function () { fail("内核文件加载失败，请刷新重试（emulatorjs/ 目录缺失）"); };
+    document.head.appendChild(s);
+    if (remembered) {
+      keepTip.classList.add("show");
+      setTimeout(function () { keepTip.classList.remove("show"); }, 3500);
+    }
+  }
+  function fail(text) {
+    booted = false;
+    msg.textContent = text;
+    gate.classList.add("show");
+  }
+  function decode(u8) {
+    // 兼容用户误选到 .zip/.7z：交给 EJS 自行解包；这里只做 iNES 头提示
+    if (u8.length < 16) return "文件太小，看起来不是 .nes 游戏文件";
+    var h = String.fromCharCode(u8[0], u8[1], u8[2], u8[3]);
+    if (h !== "NES" + String.fromCharCode(26)) return "";   // 可能是压缩包，交给内核判断
+    var mapper = ((u8[6] >> 4) | (u8[7] & 0xF0)) & 0xFFF;
+    return "已识别卡带：mapper " + mapper + "，大小 " + Math.round(u8.length / 1024) + " KB";
+  }
+
+  /* ---------- 交互 ---------- */
+  document.getElementById("pick").addEventListener("click", function () { document.getElementById("file").click(); });
+  document.getElementById("file").addEventListener("change", function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var u8 = new Uint8Array(fr.result);
+      var warn = decode(u8);
+      var name = f.name.replace(/\.[^.]+$/, "");
+      save(u8, name).then(function () { boot(u8, name, false); });
+    };
+    fr.readAsArrayBuffer(f);
+  });
+  forgetBtn.addEventListener("click", function () {
+    drop().then(function () { location.reload(); });
+  });
+
+  /* ---------- 进入页面：先找已记住的文件 ---------- */
+  load().then(function (rec) {
+    if (rec && rec.data) {
+      var u8 = rec.data.length ? new Uint8Array(rec.data) : null;
+      if (u8 && u8.length > 16) { forgetBtn.style.display = ""; boot(u8, rec.name, true); return; }
+    }
+    forgetBtn.style.display = "none";
+    gate.classList.add("show");
+    msg.textContent = "手机上还没有游戏文件？从电脑用微信「文件传输助手」发到手机，存进「文件」App，再回到这里选择即可。";
+  });
+})();
+</script>
+</body>
+</html>
