@@ -120,15 +120,19 @@
     s.src = "emulatorjs/loader.js";
     s.onerror = function () { fail("内核文件加载失败，请刷新重试（emulatorjs/ 目录缺失）"); };
     document.head.appendChild(s);
-    // 兜底：触摸设备上一旦开始运行，强制把虚拟手柄常显（否则菜单开关后可能不再出现）
+    // 兜底守护：EJS 启动时有一个「250ms 后隐藏虚拟手柄」的定时器与显示逻辑抢跑（竞态），
+    // 有时会把刚显示的手柄又藏起来。这里在触摸设备上持续纠正；用户在设置里关掉手柄时不再干预。
     var isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
-    var guard = setInterval(function () {
-      var e = window.EJS_emulator;
-      if (!e || !e.started) return;
-      if (isTouch && typeof e.toggleVirtualGamepad === "function") e.toggleVirtualGamepad(true);
-      clearInterval(guard);
-    }, 700);
-    setTimeout(function () { clearInterval(guard); }, 120000);
+    if (isTouch) {
+      setInterval(function () {
+        var e = window.EJS_emulator;
+        if (!e || !e.started || e.failedToStart) return;
+        var g = document.querySelector(".ejs_virtualGamepad_parent");
+        if (!g || getComputedStyle(g).display !== "none") return;
+        if (e.getSettingValue && e.getSettingValue("virtual-gamepad") === "disabled") return;
+        if (typeof e.toggleVirtualGamepad === "function") e.toggleVirtualGamepad(true);
+      }, 600);
+    }
     keepAwake();
     if (remembered) {
       keepTip.classList.add("show");
