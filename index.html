@@ -691,6 +691,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
       if (e.touches.length > 1) e.preventDefault();
     }, { passive: false });
 
+    autoZen();          // 横屏首次加载就隐藏工具栏，画面立即占满
     fit();
     requestAnimationFrame(loop);
 
@@ -733,6 +734,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
 
 
 
