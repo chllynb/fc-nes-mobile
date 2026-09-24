@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="重装机兵">
 <meta name="theme-color" content="#0b0d0a">
+<link rel="icon" href="data:,">
 <title>重装机兵 · 手机高兼容版</title>
 <link rel="stylesheet" href="emulatorjs/emulator.min.css">
 <style>
@@ -31,6 +32,39 @@
     z-index:6;display:none;background:rgba(20,24,16,.92);border:1px solid rgba(215,232,168,.2);color:#8a9a6a;
     font-size:11.5px;padding:6px 12px;border-radius:14px;white-space:nowrap}
   #keep.show{display:block}
+
+  /* ---------- 横屏辅助 ---------- */
+  #rot{position:fixed;inset:0;z-index:8;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;text-align:center;padding:24px;background:rgba(6,8,5,.95)}
+  #rot.show{display:flex}
+  #rot .icon{font-size:46px}
+  #rot h1{margin:0;color:#ffb02e;font-size:19px;letter-spacing:1px}
+  #rot .dim{color:#8a9a6a;font-size:12.5px;max-width:330px;line-height:1.8}
+  #rot .btn{background:#ffb02e;color:#12140e;font-weight:700;padding:12px 22px;border:0;border-radius:10px;font-size:15px}
+  #rot .lnk{background:none;border:0;color:#8a9a6a;font-size:12px;text-decoration:underline}
+  /* 竖着拿手机也能横屏玩：把画面容器转 90° */
+  body.rot90 #game{position:fixed;left:50%;top:50%;width:100vh;height:100vw;
+    margin-left:-50vh;margin-top:-50vw;transform:rotate(90deg)}
+  #force,#cloud{position:fixed;z-index:7;left:calc(10px + env(safe-area-inset-left));
+    background:rgba(20,24,16,.92);border:1px solid rgba(215,232,168,.28);
+    color:#d7e8a8;font-size:12px;padding:8px 12px;border-radius:16px;display:none}
+  #cloud{top:calc(8px + env(safe-area-inset-top))}
+  #force{top:calc(48px + env(safe-area-inset-top))}
+  #force.show,#cloud.show{display:block}
+  #cpanel{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:10;display:none;
+    background:rgba(16,20,14,.97);border:1px solid rgba(215,232,168,.25);border-radius:14px;padding:14px;
+    color:#d7e8a8;font-size:13px;max-width:430px;margin:0 auto;line-height:1.7}
+  #cpanel.show{display:block}
+  #cpanel h4{margin:0 0 6px;color:#ffb02e;font-size:14px}
+  #cpanel .row{display:flex;gap:8px;margin:9px 0;flex-wrap:wrap}
+  #cpanel button{flex:1 1 auto;min-width:104px;padding:10px;border-radius:9px;border:1px solid rgba(215,232,168,.28);
+    background:rgba(255,255,255,.06);color:#d7e8a8;font-size:13px}
+  #cpanel button.acc{background:#ffb02e;color:#12140e;border-color:#ffb02e;font-weight:700}
+  #cpanel .st{color:#8a9a6a;font-size:11.5px;margin-top:6px}
+  #toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));transform:translate(-50%,12px);
+    z-index:30;background:rgba(20,24,16,.96);border:1px solid #ffb02e;color:#ffb02e;padding:9px 16px;
+    border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:.22s;max-width:86vw;text-align:center}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
 </style>
 </head>
 <body>
@@ -47,7 +81,31 @@
   <button class="link" id="forget" style="display:none">换个游戏文件 / 忘掉已记住的文件</button>
 </div>
 
+<div id="rot">
+  <div class="icon">📱</div>
+  <h1>把手机横过来玩</h1>
+  <div class="dim">横屏时画面最大、按键在两侧。<br>不想转手机也行——点下面的按钮，竖着拿也能横屏玩。</div>
+  <button class="btn" id="rotForce">🔄 强制横屏（竖着拿）</button>
+  <button class="lnk" id="rotDismiss">继续竖屏</button>
+</div>
+<button id="force">📱 退出强制横屏</button>
+<button id="cloud">☁️ 存档</button>
+<div id="cpanel">
+  <h4>☁️ 云存档（服务器）</h4>
+  <div class="row">
+    <button class="acc" id="cUp">⬆ 上传当前进度</button>
+    <button id="cDown">⬇ 载入云端进度</button>
+  </div>
+  <div class="row">
+    <button id="cAuto">自动上传：关</button>
+    <button id="cReload">重开游戏</button>
+    <button id="cClose">关闭</button>
+  </div>
+  <div class="st" id="cSt">读取中…</div>
+</div>
+
 <div id="keep">已记住这个文件，下次直接开玩</div>
+<div id="toast"></div>
 
 <script>
 (function () {
@@ -197,6 +255,158 @@
     drop().then(function () { location.reload(); });
   });
 
+  /* ---------- 小提示条 ---------- */
+  var toastT = null;
+  function toast(m) {
+    var t = document.getElementById("toast");
+    if (!t) return;
+    t.textContent = m; t.classList.add("show");
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { t.classList.remove("show"); }, 2600);
+  }
+
+  /* ---------- 横屏辅助 ---------- */
+  /* iPhone Safari 不支持锁定屏幕方向、也不支持网页全屏，所以"横屏"用两个办法：
+     (1) 优先尝试系统方向锁（安卓 Chrome 等支持）；
+     (2) 兜底：把画面容器整体旋转 90°，并让模拟器以为窗口是横的 —— 竖着拿手机也能横屏玩。 */
+  var FORCE_KEY = "zzjb-竖屏偏好";
+  function realDims() { var d = document.documentElement; return { w: d.clientWidth, h: d.clientHeight }; }
+  function isPortrait() { var d = realDims(); return d.h > d.w; }
+  function setFakeWindow(on) {
+    try {
+      if (on) {
+        Object.defineProperty(window, "innerWidth", { configurable: true, get: function () { return realDims().h; } });
+        Object.defineProperty(window, "innerHeight", { configurable: true, get: function () { return realDims().w; } });
+      } else {
+        delete window.innerWidth; delete window.innerHeight;
+      }
+    } catch (e) {}
+    setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 80);
+  }
+  var forced = false, dismissedHint = false;
+  function forceLandscape(on) {
+    forced = !!on;
+    document.body.classList.toggle("rot90", forced);
+    document.getElementById("force").classList.toggle("show", forced);
+    setFakeWindow(forced);
+    document.getElementById("rot").classList.remove("show");
+  }
+  function preferPortrait() { try { localStorage.setItem(FORCE_KEY, "1"); } catch (e) {} }
+  function initOrientation() {
+    var hint = document.getElementById("rot");
+    document.getElementById("rotForce").addEventListener("click", function () {
+      try { localStorage.removeItem(FORCE_KEY); } catch (e) {}
+      forceLandscape(true);
+      try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(function () {}); } catch (e) {}
+      toast("已强制横屏（竖着拿也能玩）");
+    });
+    document.getElementById("rotDismiss").addEventListener("click", function () {
+      preferPortrait(); dismissedHint = true; hint.classList.remove("show");
+    });
+    document.getElementById("force").addEventListener("click", function () {
+      preferPortrait(); forceLandscape(false); dismissedHint = true;
+      toast("已恢复竖屏显示");
+    });
+    function apply(first) {
+      var portrait = isPortrait();
+      var optedOut = false;
+      try { optedOut = localStorage.getItem(FORCE_KEY) === "1"; } catch (e) {}
+      if (portrait && !optedOut) {
+        if (!forced) {
+          forceLandscape(true);
+          if (first) toast("已默认横屏 · 想竖屏玩点右侧「退出强制横屏」");
+        }
+      } else if (!portrait && forced && !optedOut) {
+        forceLandscape(false);                 // 用户真把手机横过来了，就恢复正常布局
+      } else if (portrait && optedOut && !dismissedHint && booted) {
+        hint.classList.add("show");            // 选了竖屏、又在竖着拿 → 提示可以切回横屏
+        dismissedHint = true;
+      }
+    }
+    apply(true);
+    window.addEventListener("resize", function () { apply(false); });
+    window.addEventListener("orientationchange", function () { setTimeout(function () { apply(false); }, 260); });
+  }
+
+  /* ---------- 云存档（仅服务器版：地址第一段是私密 token 时才启用） ---------- */
+  var CLOUD = { on: false, auto: true, timer: null, token: "", has: false };
+  function fmtTime(ts) {
+    var d = new Date(ts * 1000);
+    return (d.getMonth() + 1) + "月" + d.getDate() + "日 " + ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+  }
+  function api(path, opts) { return fetch("/api/" + CLOUD.token + "/" + path, opts); }
+  function cloudStatus(t) { var el = document.getElementById("cSt"); if (el) el.textContent = t; }
+  function refreshCloud(quiet) {
+    if (!CLOUD.on) return;
+    api("ping").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.ok) { cloudStatus("云端接口异常"); return; }
+      var s = (j.slots || [])[0];
+      CLOUD.has = !!s;
+      cloudStatus(s ? ("云端进度：" + fmtTime(s.ts) + "（" + Math.round(s.size / 1024) + " KB）")
+                    : "云端还没有进度");
+      if (s && quiet !== true) toast("云端有进度 · 点 ☁️ 可载入");
+    }).catch(function () { cloudStatus("读取失败（网络？）"); });
+  }
+  function uploadCloud(silent) {
+    var e = window.EJS_emulator;
+    if (!e || !e.started) { if (!silent) toast("还没开始游戏"); return; }
+    var st;
+    try { st = e.gameManager.getState(); } catch (x) { if (!silent) toast("取存档失败"); return; }
+    api("auto", { method: "PUT", body: st, headers: { "Content-Type": "application/octet-stream" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (j && j.ok) { if (!silent) toast("已上传云端（" + Math.round(j.size / 1024) + " KB）"); refreshCloud(true); }
+        else if (!silent) toast("上传失败（服务端拒绝）");
+      }).catch(function () { if (!silent) toast("上传失败（网络）"); });
+  }
+  function downloadCloud() {
+    if (!CLOUD.on) return;
+    api("auto").then(function (r) { if (!r.ok) throw new Error("none"); return r.arrayBuffer(); })
+      .then(function (buf) {
+        var e = window.EJS_emulator;
+        if (!e) throw new Error("no nes");
+        e.gameManager.loadState(new Uint8Array(buf));
+        toast("已载入云端进度");
+      }).catch(function () { toast("云端还没有进度"); });
+  }
+  function setAuto(on) {
+    CLOUD.auto = !!on;
+    try { localStorage.setItem("zzjb-auto", on ? "1" : "0"); } catch (e) {}
+    var b = document.getElementById("cAuto");
+    b.textContent = "自动上传：" + (on ? "开（每 60 秒）" : "关");
+    b.className = on ? "acc" : "";
+    if (CLOUD.timer) { clearInterval(CLOUD.timer); CLOUD.timer = null; }
+    if (on) CLOUD.timer = setInterval(function () {
+      if (!document.hidden && window.EJS_emulator && window.EJS_emulator.started) uploadCloud(true);
+    }, 60000);
+  }
+  function initCloud() {
+    CLOUD.token = location.pathname.split("/")[1] || "";
+    if (!/^[0-9a-f]{16,64}$/.test(CLOUD.token)) return;      // 非服务器版（如 GitHub Pages）不启用
+    api("ping").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.ok) return;
+      CLOUD.on = true;
+      document.getElementById("cloud").classList.add("show");
+      refreshCloud(true);
+      var a = null; try { a = localStorage.getItem("zzjb-auto"); } catch (e) {}
+      setAuto(a === null ? true : a === "1");                // 默认开
+      document.getElementById("cloud").addEventListener("click", function () {
+        document.getElementById("cpanel").classList.toggle("show");
+        refreshCloud(true);
+      });
+      document.getElementById("cUp").addEventListener("click", function () { uploadCloud(false); });
+      document.getElementById("cDown").addEventListener("click", function () { downloadCloud(); });
+      document.getElementById("cAuto").addEventListener("click", function () { setAuto(!CLOUD.auto); });
+      document.getElementById("cReload").addEventListener("click", function () {
+        var e = window.EJS_emulator; if (e) { e.gameManager.restart(); toast("游戏已重开"); }
+      });
+      document.getElementById("cClose").addEventListener("click", function () {
+        document.getElementById("cpanel").classList.remove("show");
+      });
+      document.addEventListener("visibilitychange", function () { if (document.hidden && CLOUD.auto) uploadCloud(true); });
+    }).catch(function () {});
+  }
+
   /* ---------- 进入页面：先找已记住的文件；再试服务器同目录的 game.nes；最后才让用户选 ---------- */
   load().then(function (rec) {
     if (rec && rec.data) {
@@ -215,6 +425,11 @@
     gate.classList.add("show");
     msg.textContent = text;
   }
+
+  /* ---------- 初始化 ---------- */
+  initOrientation();
+  initCloud();
+  window.addEventListener("pagehide", function () { if (CLOUD.on && CLOUD.auto) uploadCloud(true); });
 })();
 </script>
 </body>
